@@ -108,7 +108,6 @@ pub struct UpdateResumeRequest {
 /// 个人信息响应（camelCase）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonalInfoResponse {
-    pub id: String,
     pub name: String,
     pub title: String,
     pub email: String,
@@ -123,7 +122,6 @@ pub struct PersonalInfoResponse {
 impl From<ResumeSingle> for PersonalInfoResponse {
     fn from(resume: ResumeSingle) -> Self {
         Self {
-            id: resume.id.to_string(),
             name: resume.name,
             title: resume.title,
             email: resume.email,
@@ -150,6 +148,9 @@ pub struct ExperienceResponse {
     pub end_date: Option<String>,
     pub description: Vec<String>,
     pub technologies: Vec<String>,
+    pub achievements: Vec<String>,
+    #[serde(rename = "isCurrent")]
+    pub is_current: bool,
 }
 
 /// 教育经历响应（camelCase）
@@ -166,6 +167,8 @@ pub struct EducationResponse {
     pub end_date: Option<String>,
     pub gpa: Option<String>,
     pub description: Option<String>,
+    #[serde(rename = "isCurrent")]
+    pub is_current: bool,
 }
 
 /// 技能响应（camelCase）
@@ -192,6 +195,10 @@ pub struct ProjectResponse {
     #[serde(rename = "endDate")]
     pub end_date: Option<String>,
     pub highlights: Vec<String>,
+    pub link: Option<String>,
+    pub repository: Option<String>,
+    #[serde(rename = "isCurrent")]
+    pub is_current: bool,
 }
 
 /// 证书响应（camelCase）
@@ -202,6 +209,12 @@ pub struct CertificateResponse {
     pub issuer: String,
     #[serde(rename = "issueDate")]
     pub issue_date: String,
+    #[serde(rename = "expiryDate")]
+    pub expiry_date: Option<String>,
+    #[serde(rename = "credentialId")]
+    pub credential_id: Option<String>,
+    #[serde(rename = "credentialUrl")]
+    pub credential_url: Option<String>,
 }
 
 /// 语言能力响应（camelCase）
@@ -225,12 +238,10 @@ pub struct ResumeSingleResponse {
     pub projects: Vec<ProjectResponse>,
     pub certificates: Vec<CertificateResponse>,
     pub languages: Vec<LanguageResponse>,
-    #[serde(rename = "createdAt")]
-    pub created_at: String,
-    #[serde(rename = "updatedAt")]
-    pub updated_at: String,
     #[serde(rename = "lastUpdated")]
     pub last_updated: String,
+    #[serde(rename = "metadata")]
+    pub metadata: Option<ResumeMetadata>,
 }
 
 impl TryFrom<ResumeSingle> for ResumeSingleResponse {
@@ -239,7 +250,6 @@ impl TryFrom<ResumeSingle> for ResumeSingleResponse {
     fn try_from(resume: ResumeSingle) -> Result<Self, Self::Error> {
         // 先构建 PersonalInfoResponse（在移动字段之前）
         let personal_info = PersonalInfoResponse {
-            id: resume.id.to_string(),
             name: resume.name.clone(),
             title: resume.title.clone(),
             email: resume.email.clone(),
@@ -269,9 +279,8 @@ impl TryFrom<ResumeSingle> for ResumeSingleResponse {
             projects,
             certificates,
             languages,
-            created_at: resume.created_at.to_rfc3339(),
-            updated_at: resume.updated_at.to_rfc3339(),
             last_updated: resume.last_updated.to_rfc3339(),
+            metadata: None,
         })
     }
 }
@@ -320,7 +329,6 @@ pub struct ResumeDetail {
 impl From<PersonalInfo> for PersonalInfoResponse {
     fn from(info: PersonalInfo) -> Self {
         Self {
-            id: info.id.to_string(),
             name: info.name,
             title: info.title,
             email: info.email,
@@ -338,24 +346,27 @@ impl From<Experience> for ExperienceResponse {
     fn from(exp: Experience) -> Self {
         let description: Vec<String> = serde_json::from_value(exp.description).unwrap_or_default();
         let technologies: Vec<String> = serde_json::from_value(exp.technologies).unwrap_or_default();
-        let end_date = exp.end_date.map(|d| d.format("%Y-%m").to_string());
+        let achievements: Vec<String> = serde_json::from_value(exp.achievements).unwrap_or_default();
+        let end_date = exp.end_date.map(|d| d.format("%Y-%m-%d").to_string());
         
         Self {
             id: exp.id.to_string(),
             company: exp.company,
             position: exp.position,
             duration: exp.duration,
-            start_date: exp.start_date.format("%Y-%m").to_string(),
+            start_date: exp.start_date.format("%Y-%m-%d").to_string(),
             end_date,
             description,
             technologies,
+            achievements,
+            is_current: exp.current,
         }
     }
 }
 
 impl From<Education> for EducationResponse {
     fn from(edu: Education) -> Self {
-        let end_date = edu.end_date.map(|d| d.format("%Y-%m").to_string());
+        let end_date = edu.end_date.map(|d| d.format("%Y-%m-%d").to_string());
         let gpa = edu.gpa.map(|g| format!("{:.2}", g));
         
         Self {
@@ -364,10 +375,11 @@ impl From<Education> for EducationResponse {
             degree: edu.degree,
             major: edu.major,
             duration: edu.duration,
-            start_date: edu.start_date.format("%Y-%m").to_string(),
+            start_date: edu.start_date.format("%Y-%m-%d").to_string(),
             end_date,
             gpa,
             description: edu.description,
+            is_current: edu.current,
         }
     }
 }
@@ -398,7 +410,7 @@ impl From<Project> for ProjectResponse {
     fn from(proj: Project) -> Self {
         let technologies: Vec<String> = serde_json::from_value(proj.technologies).unwrap_or_default();
         let highlights: Vec<String> = serde_json::from_value(proj.highlights).unwrap_or_default();
-        let end_date = proj.end_date.map(|d| d.format("%Y-%m").to_string());
+        let end_date = proj.end_date.map(|d| d.format("%Y-%m-%d").to_string());
         
         Self {
             id: proj.id.to_string(),
@@ -406,9 +418,12 @@ impl From<Project> for ProjectResponse {
             description: proj.description,
             technologies,
             duration: proj.duration,
-            start_date: proj.start_date.format("%Y-%m").to_string(),
+            start_date: proj.start_date.format("%Y-%m-%d").to_string(),
             end_date,
             highlights,
+            link: proj.link,
+            repository: proj.repository,
+            is_current: proj.current,
         }
     }
 }
@@ -419,7 +434,10 @@ impl From<Certificate> for CertificateResponse {
             id: cert.id.to_string(),
             name: cert.name,
             issuer: cert.issuer,
-            issue_date: cert.issue_date.format("%Y-%m").to_string(),
+            issue_date: cert.issue_date.format("%Y-%m-%d").to_string(),
+            expiry_date: cert.expiry_date.map(|d| d.format("%Y-%m-%d").to_string()),
+            credential_id: cert.credential_id,
+            credential_url: cert.credential_url,
         }
     }
 }
@@ -441,6 +459,15 @@ impl From<Language> for LanguageResponse {
     }
 }
 
+/// 简历元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumeMetadata {
+    pub version: String,
+    pub completeness: i32,
+    #[serde(rename = "missingFields")]
+    pub missing_fields: Vec<String>,
+}
+
 /// 完整简历响应（扁平化，符合前端期望格式）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumeDetailResponse {
@@ -456,6 +483,8 @@ pub struct ResumeDetailResponse {
     pub languages: Vec<LanguageResponse>,
     #[serde(rename = "lastUpdated")]
     pub last_updated: String,
+    #[serde(rename = "metadata")]
+    pub metadata: Option<ResumeMetadata>,
 }
 
 impl From<ResumeDetail> for ResumeDetailResponse {
@@ -471,6 +500,7 @@ impl From<ResumeDetail> for ResumeDetailResponse {
             certificates: detail.certificates.into_iter().map(CertificateResponse::from).collect(),
             languages: detail.languages.into_iter().map(LanguageResponse::from).collect(),
             last_updated: detail.resume.last_updated.to_rfc3339(),
+            metadata: None,
         }
     }
 }

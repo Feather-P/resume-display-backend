@@ -1,3 +1,4 @@
 /target
 .env
 .VSCodeCounter
+.DS_Store
