@@ -7,6 +7,279 @@ use uuid::Uuid;
 use super::{Certificate, Education, Experience, Language, PersonalInfo, Project, Skill};
 use rust_decimal::Decimal;
 
+// =====================================================
+// 单一表架构模型
+// =====================================================
+
+/// 简历单一表模型 - 对应 resume_single 表
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ResumeSingle {
+    pub id: Uuid,
+    pub name: String,
+    pub title: String,
+    pub email: String,
+    pub phone: String,
+    pub location: String,
+    pub website: Option<String>,
+    pub github: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub summary: Option<String>,
+    pub experience: Value,
+    pub education: Value,
+    pub skills: Value,
+    pub projects: Value,
+    pub certificates: Value,
+    pub languages: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_updated: DateTime<Utc>,
+}
+
+/// 创建简历请求（单一表架构）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateResumeSingle {
+    pub name: String,
+    pub title: String,
+    pub email: String,
+    pub phone: String,
+    pub location: String,
+    pub website: Option<String>,
+    pub github: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub summary: Option<String>,
+    pub experience: Option<Value>,
+    pub education: Option<Value>,
+    pub skills: Option<Value>,
+    pub projects: Option<Value>,
+    pub certificates: Option<Value>,
+    pub languages: Option<Value>,
+}
+
+impl CreateResumeSingle {
+    pub fn new(name: String, title: String, email: String, phone: String, location: String) -> Self {
+        Self {
+            name,
+            title,
+            email,
+            phone,
+            location,
+            website: None,
+            github: None,
+            avatar: None,
+            bio: None,
+            summary: None,
+            experience: Some(Value::Array(vec![])),
+            education: Some(Value::Array(vec![])),
+            skills: Some(Value::Array(vec![])),
+            projects: Some(Value::Array(vec![])),
+            certificates: Some(Value::Array(vec![])),
+            languages: Some(Value::Array(vec![])),
+        }
+    }
+}
+
+/// 更新简历请求（单一表架构）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateResumeRequest {
+    pub name: Option<String>,
+    pub title: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub location: Option<String>,
+    pub website: Option<String>,
+    pub github: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+    pub summary: Option<String>,
+    pub experience: Option<Value>,
+    pub education: Option<Value>,
+    pub skills: Option<Value>,
+    pub projects: Option<Value>,
+    pub certificates: Option<Value>,
+    pub languages: Option<Value>,
+}
+
+// =====================================================
+// 响应模型（camelCase 格式）
+// =====================================================
+
+/// 个人信息响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonalInfoResponse {
+    pub id: String,
+    pub name: String,
+    pub title: String,
+    pub email: String,
+    pub phone: String,
+    pub location: String,
+    pub website: Option<String>,
+    pub github: Option<String>,
+    pub avatar: Option<String>,
+    pub bio: Option<String>,
+}
+
+impl From<ResumeSingle> for PersonalInfoResponse {
+    fn from(resume: ResumeSingle) -> Self {
+        Self {
+            id: resume.id.to_string(),
+            name: resume.name,
+            title: resume.title,
+            email: resume.email,
+            phone: resume.phone,
+            location: resume.location,
+            website: resume.website,
+            github: resume.github,
+            avatar: resume.avatar,
+            bio: resume.bio,
+        }
+    }
+}
+
+/// 工作经验响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExperienceResponse {
+    pub id: String,
+    pub company: String,
+    pub position: String,
+    pub duration: String,
+    #[serde(rename = "startDate")]
+    pub start_date: String,
+    #[serde(rename = "endDate")]
+    pub end_date: Option<String>,
+    pub description: Vec<String>,
+    pub technologies: Vec<String>,
+}
+
+/// 教育经历响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EducationResponse {
+    pub id: String,
+    pub institution: String,
+    pub degree: String,
+    pub major: String,
+    pub duration: String,
+    #[serde(rename = "startDate")]
+    pub start_date: String,
+    #[serde(rename = "endDate")]
+    pub end_date: Option<String>,
+    pub gpa: Option<String>,
+    pub description: Option<String>,
+}
+
+/// 技能响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillResponse {
+    pub id: String,
+    pub name: String,
+    pub level: String,
+    pub category: String,
+    #[serde(rename = "yearsOfExperience")]
+    pub years_of_experience: Option<f64>,
+}
+
+/// 项目响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectResponse {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub technologies: Vec<String>,
+    pub duration: String,
+    #[serde(rename = "startDate")]
+    pub start_date: String,
+    #[serde(rename = "endDate")]
+    pub end_date: Option<String>,
+    pub highlights: Vec<String>,
+}
+
+/// 证书响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CertificateResponse {
+    pub id: String,
+    pub name: String,
+    pub issuer: String,
+    #[serde(rename = "issueDate")]
+    pub issue_date: String,
+}
+
+/// 语言能力响应（camelCase）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanguageResponse {
+    pub id: String,
+    pub name: String,
+    pub proficiency: String,
+}
+
+/// 完整简历响应（单一表架构，camelCase 格式）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumeSingleResponse {
+    pub id: String,
+    #[serde(rename = "personalInfo")]
+    pub personal_info: PersonalInfoResponse,
+    pub summary: Option<String>,
+    pub experience: Vec<ExperienceResponse>,
+    pub education: Vec<EducationResponse>,
+    pub skills: Vec<SkillResponse>,
+    pub projects: Vec<ProjectResponse>,
+    pub certificates: Vec<CertificateResponse>,
+    pub languages: Vec<LanguageResponse>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+    #[serde(rename = "lastUpdated")]
+    pub last_updated: String,
+}
+
+impl TryFrom<ResumeSingle> for ResumeSingleResponse {
+    type Error = serde_json::Error;
+
+    fn try_from(resume: ResumeSingle) -> Result<Self, Self::Error> {
+        // 先构建 PersonalInfoResponse（在移动字段之前）
+        let personal_info = PersonalInfoResponse {
+            id: resume.id.to_string(),
+            name: resume.name.clone(),
+            title: resume.title.clone(),
+            email: resume.email.clone(),
+            phone: resume.phone.clone(),
+            location: resume.location.clone(),
+            website: resume.website.clone(),
+            github: resume.github.clone(),
+            avatar: resume.avatar.clone(),
+            bio: resume.bio.clone(),
+        };
+
+        // 解析 JSONB 字段
+        let experience: Vec<ExperienceResponse> = serde_json::from_value(resume.experience).unwrap_or_default();
+        let education: Vec<EducationResponse> = serde_json::from_value(resume.education).unwrap_or_default();
+        let skills: Vec<SkillResponse> = serde_json::from_value(resume.skills).unwrap_or_default();
+        let projects: Vec<ProjectResponse> = serde_json::from_value(resume.projects).unwrap_or_default();
+        let certificates: Vec<CertificateResponse> = serde_json::from_value(resume.certificates).unwrap_or_default();
+        let languages: Vec<LanguageResponse> = serde_json::from_value(resume.languages).unwrap_or_default();
+
+        Ok(Self {
+            id: resume.id.to_string(),
+            personal_info,
+            summary: resume.summary,
+            experience,
+            education,
+            skills,
+            projects,
+            certificates,
+            languages,
+            created_at: resume.created_at.to_rfc3339(),
+            updated_at: resume.updated_at.to_rfc3339(),
+            last_updated: resume.last_updated.to_rfc3339(),
+        })
+    }
+}
+
+// =====================================================
+// 旧模型（保留以保持向后兼容）
+// =====================================================
+
 /// 简历模型
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Resume {
@@ -44,21 +317,6 @@ pub struct ResumeDetail {
     pub languages: Vec<Language>,
 }
 
-/// 个人信息响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersonalInfoResponse {
-    pub id: String,
-    pub name: String,
-    pub title: String,
-    pub email: String,
-    pub phone: String,
-    pub location: String,
-    pub website: Option<String>,
-    pub github: Option<String>,
-    pub avatar: Option<String>,
-    pub bio: Option<String>,
-}
-
 impl From<PersonalInfo> for PersonalInfoResponse {
     fn from(info: PersonalInfo) -> Self {
         Self {
@@ -74,21 +332,6 @@ impl From<PersonalInfo> for PersonalInfoResponse {
             bio: info.bio,
         }
     }
-}
-
-/// 工作经验响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExperienceResponse {
-    pub id: String,
-    pub company: String,
-    pub position: String,
-    pub duration: String,
-    #[serde(rename = "startDate")]
-    pub start_date: String,
-    #[serde(rename = "endDate")]
-    pub end_date: Option<String>,
-    pub description: Vec<String>,
-    pub technologies: Vec<String>,
 }
 
 impl From<Experience> for ExperienceResponse {
@@ -110,22 +353,6 @@ impl From<Experience> for ExperienceResponse {
     }
 }
 
-/// 教育经历响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EducationResponse {
-    pub id: String,
-    pub institution: String,
-    pub degree: String,
-    pub major: String,
-    pub duration: String,
-    #[serde(rename = "startDate")]
-    pub start_date: String,
-    #[serde(rename = "endDate")]
-    pub end_date: Option<String>,
-    pub gpa: Option<String>,
-    pub description: Option<String>,
-}
-
 impl From<Education> for EducationResponse {
     fn from(edu: Education) -> Self {
         let end_date = edu.end_date.map(|d| d.format("%Y-%m").to_string());
@@ -143,17 +370,6 @@ impl From<Education> for EducationResponse {
             description: edu.description,
         }
     }
-}
-
-/// 技能响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillResponse {
-    pub id: String,
-    pub name: String,
-    pub level: String,
-    pub category: String,
-    #[serde(rename = "yearsOfExperience")]
-    pub years_of_experience: Option<f64>,
 }
 
 impl From<Skill> for SkillResponse {
@@ -178,21 +394,6 @@ impl From<Skill> for SkillResponse {
     }
 }
 
-/// 项目响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectResponse {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub technologies: Vec<String>,
-    pub duration: String,
-    #[serde(rename = "startDate")]
-    pub start_date: String,
-    #[serde(rename = "endDate")]
-    pub end_date: Option<String>,
-    pub highlights: Vec<String>,
-}
-
 impl From<Project> for ProjectResponse {
     fn from(proj: Project) -> Self {
         let technologies: Vec<String> = serde_json::from_value(proj.technologies).unwrap_or_default();
@@ -212,16 +413,6 @@ impl From<Project> for ProjectResponse {
     }
 }
 
-/// 证书响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CertificateResponse {
-    pub id: String,
-    pub name: String,
-    pub issuer: String,
-    #[serde(rename = "issueDate")]
-    pub issue_date: String,
-}
-
 impl From<Certificate> for CertificateResponse {
     fn from(cert: Certificate) -> Self {
         Self {
@@ -231,14 +422,6 @@ impl From<Certificate> for CertificateResponse {
             issue_date: cert.issue_date.format("%Y-%m").to_string(),
         }
     }
-}
-
-/// 语言能力响应（camelCase）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LanguageResponse {
-    pub id: String,
-    pub name: String,
-    pub proficiency: String,
 }
 
 impl From<Language> for LanguageResponse {
@@ -389,5 +572,46 @@ mod tests {
         let resume = Resume::from(req);
 
         assert!(resume.summary.is_none());
+    }
+
+    #[test]
+    fn test_create_resume_single() {
+        let req = CreateResumeSingle::new(
+            "张三".to_string(),
+            "软件工程师".to_string(),
+            "zhangsan@example.com".to_string(),
+            "13800138000".to_string(),
+            "北京".to_string(),
+        );
+
+        assert_eq!(req.name, "张三");
+        assert_eq!(req.title, "软件工程师");
+        assert_eq!(req.email, "zhangsan@example.com");
+        assert!(req.experience.is_some());
+    }
+
+    #[test]
+    fn test_update_resume_request() {
+        let req = UpdateResumeRequest {
+            name: Some("李四".to_string()),
+            title: None,
+            email: None,
+            phone: None,
+            location: None,
+            website: None,
+            github: None,
+            avatar: None,
+            bio: None,
+            summary: None,
+            experience: None,
+            education: None,
+            skills: None,
+            projects: None,
+            certificates: None,
+            languages: None,
+        };
+
+        assert_eq!(req.name, Some("李四".to_string()));
+        assert!(req.title.is_none());
     }
 }

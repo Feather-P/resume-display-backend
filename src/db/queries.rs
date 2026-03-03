@@ -4,11 +4,15 @@ use uuid::Uuid;
 
 use crate::models::{
     Certificate, CreateCertificate, CreateEducation, CreateExperience, CreateLanguage,
-    CreatePersonalInfo, CreateProject, CreateResume, CreateSkill, Education, Experience,
-    Language, PersonalInfo, Project, Resume, ResumeDetail, Skill, UpdateCertificate,
-    UpdateEducation, UpdateExperience, UpdateLanguage, UpdatePersonalInfo, UpdateProject,
-    UpdateResume, UpdateSkill,
+    CreatePersonalInfo, CreateProject, CreateResume, CreateResumeSingle, CreateSkill, Education,
+    Experience, Language, PersonalInfo, Project, Resume, ResumeDetail, ResumeSingle, Skill,
+    UpdateCertificate, UpdateEducation, UpdateExperience, UpdateLanguage, UpdatePersonalInfo,
+    UpdateProject, UpdateResume, UpdateResumeRequest, UpdateSkill,
 };
+
+/// 硬编码的锁定简历ID
+/// 用于单简历模式，所有查询都使用此ID
+pub const LOCKED_RESUME_ID: Uuid = Uuid::from_u128(0x00000000_0000_0000_0000_000000000001);
 
 /// 数据库查询操作
 pub struct Queries {
@@ -1176,4 +1180,338 @@ impl Queries {
 
         Ok(result.rows_affected() > 0)
     }
+
+    // ==================== ResumeSingle 操作（单简历模式）====================
+
+    /// 获取单一简历（使用硬编码的锁定ID）
+    pub async fn get_resume_single(&self) -> Result<Option<ResumeSingle>> {
+        let result = sqlx::query(
+            r#"
+            SELECT
+                id, name, title, email, phone, location, website, github, avatar, bio,
+                summary, experience, education, skills, projects, certificates, languages,
+                created_at, updated_at, last_updated
+            FROM resume_single
+            WHERE id = $1
+            "#,
+        )
+        .bind(LOCKED_RESUME_ID)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = result {
+            Ok(Some(ResumeSingle {
+                id: row.get("id"),
+                name: row.get("name"),
+                title: row.get("title"),
+                email: row.get("email"),
+                phone: row.get("phone"),
+                location: row.get("location"),
+                website: row.get("website"),
+                github: row.get("github"),
+                avatar: row.get("avatar"),
+                bio: row.get("bio"),
+                summary: row.get("summary"),
+                experience: row.get("experience"),
+                education: row.get("education"),
+                skills: row.get("skills"),
+                projects: row.get("projects"),
+                certificates: row.get("certificates"),
+                languages: row.get("languages"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                last_updated: row.get("last_updated"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 更新单一简历（使用硬编码的锁定ID）
+    pub async fn update_resume_single(&self, req: UpdateResumeRequest) -> Result<ResumeSingle> {
+        // 先获取当前记录
+        let current = self.get_resume_single().await?
+            .ok_or_else(|| anyhow::anyhow!("简历不存在，请先创建简历"))?;
+
+        // 构建更新值
+        let name = req.name.unwrap_or(current.name);
+        let title = req.title.unwrap_or(current.title);
+        let email = req.email.unwrap_or(current.email);
+        let phone = req.phone.unwrap_or(current.phone);
+        let location = req.location.unwrap_or(current.location);
+        let website = req.website.or(current.website);
+        let github = req.github.or(current.github);
+        let avatar = req.avatar.or(current.avatar);
+        let bio = req.bio.or(current.bio);
+        let summary = req.summary.or(current.summary);
+        let experience = req.experience.unwrap_or(current.experience);
+        let education = req.education.unwrap_or(current.education);
+        let skills = req.skills.unwrap_or(current.skills);
+        let projects = req.projects.unwrap_or(current.projects);
+        let certificates = req.certificates.unwrap_or(current.certificates);
+        let languages = req.languages.unwrap_or(current.languages);
+
+        // 执行更新
+        sqlx::query(
+            r#"
+            UPDATE resume_single
+            SET
+                name = $1, title = $2, email = $3, phone = $4, location = $5,
+                website = $6, github = $7, avatar = $8, bio = $9, summary = $10,
+                experience = $11, education = $12, skills = $13, projects = $14,
+                certificates = $15, languages = $16
+            WHERE id = $17
+            "#,
+        )
+        .bind(&name)
+        .bind(&title)
+        .bind(&email)
+        .bind(&phone)
+        .bind(&location)
+        .bind(&website)
+        .bind(&github)
+        .bind(&avatar)
+        .bind(&bio)
+        .bind(&summary)
+        .bind(&experience)
+        .bind(&education)
+        .bind(&skills)
+        .bind(&projects)
+        .bind(&certificates)
+        .bind(&languages)
+        .bind(LOCKED_RESUME_ID)
+        .execute(&self.pool)
+        .await?;
+
+        // 返回更新后的记录
+        self.get_resume_single().await?
+            .ok_or_else(|| anyhow::anyhow!("更新后无法获取简历"))
+    }
+
+    /// 创建单一简历（使用硬编码的锁定ID）
+    pub async fn create_resume_single(&self, req: CreateResumeSingle) -> Result<ResumeSingle> {
+        let now = chrono::Utc::now();
+        let experience = req.experience.unwrap_or(serde_json::json!([]));
+        let education = req.education.unwrap_or(serde_json::json!([]));
+        let skills = req.skills.unwrap_or(serde_json::json!([]));
+        let projects = req.projects.unwrap_or(serde_json::json!([]));
+        let certificates = req.certificates.unwrap_or(serde_json::json!([]));
+        let languages = req.languages.unwrap_or(serde_json::json!([]));
+
+        sqlx::query(
+            r#"
+            INSERT INTO resume_single (
+                id, name, title, email, phone, location, website, github, avatar, bio,
+                summary, experience, education, skills, projects, certificates, languages,
+                created_at, updated_at, last_updated
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17,
+                $18, $19, $20
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name, title = EXCLUDED.title, email = EXCLUDED.email,
+                phone = EXCLUDED.phone, location = EXCLUDED.location, website = EXCLUDED.website,
+                github = EXCLUDED.github, avatar = EXCLUDED.avatar, bio = EXCLUDED.bio,
+                summary = EXCLUDED.summary, experience = EXCLUDED.experience,
+                education = EXCLUDED.education, skills = EXCLUDED.skills,
+                projects = EXCLUDED.projects, certificates = EXCLUDED.certificates,
+                languages = EXCLUDED.languages
+            "#,
+        )
+        .bind(LOCKED_RESUME_ID)
+        .bind(&req.name)
+        .bind(&req.title)
+        .bind(&req.email)
+        .bind(&req.phone)
+        .bind(&req.location)
+        .bind(&req.website)
+        .bind(&req.github)
+        .bind(&req.avatar)
+        .bind(&req.bio)
+        .bind(&req.summary)
+        .bind(&experience)
+        .bind(&education)
+        .bind(&skills)
+        .bind(&projects)
+        .bind(&certificates)
+        .bind(&languages)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        // 返回创建/更新后的记录
+        self.get_resume_single().await?
+            .ok_or_else(|| anyhow::anyhow!("创建后无法获取简历"))
+    }
+}
+
+// ==================== 独立查询函数（非方法版本）====================
+
+/// 获取单一简历（独立函数，使用硬编码的锁定ID）
+pub async fn get_resume_single(pool: &PgPool) -> Result<Option<ResumeSingle>> {
+    let result = sqlx::query(
+        r#"
+        SELECT
+            id, name, title, email, phone, location, website, github, avatar, bio,
+            summary, experience, education, skills, projects, certificates, languages,
+            created_at, updated_at, last_updated
+        FROM resume_single
+        WHERE id = $1
+        "#,
+    )
+    .bind(LOCKED_RESUME_ID)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(row) = result {
+        Ok(Some(ResumeSingle {
+            id: row.get("id"),
+            name: row.get("name"),
+            title: row.get("title"),
+            email: row.get("email"),
+            phone: row.get("phone"),
+            location: row.get("location"),
+            website: row.get("website"),
+            github: row.get("github"),
+            avatar: row.get("avatar"),
+            bio: row.get("bio"),
+            summary: row.get("summary"),
+            experience: row.get("experience"),
+            education: row.get("education"),
+            skills: row.get("skills"),
+            projects: row.get("projects"),
+            certificates: row.get("certificates"),
+            languages: row.get("languages"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            last_updated: row.get("last_updated"),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// 更新单一简历（独立函数，使用硬编码的锁定ID）
+pub async fn update_resume_single(pool: &PgPool, req: UpdateResumeRequest) -> Result<ResumeSingle> {
+    // 先获取当前记录
+    let current = get_resume_single(pool).await?
+        .ok_or_else(|| anyhow::anyhow!("简历不存在，请先创建简历"))?;
+
+    // 构建更新值
+    let name = req.name.unwrap_or(current.name);
+    let title = req.title.unwrap_or(current.title);
+    let email = req.email.unwrap_or(current.email);
+    let phone = req.phone.unwrap_or(current.phone);
+    let location = req.location.unwrap_or(current.location);
+    let website = req.website.or(current.website);
+    let github = req.github.or(current.github);
+    let avatar = req.avatar.or(current.avatar);
+    let bio = req.bio.or(current.bio);
+    let summary = req.summary.or(current.summary);
+    let experience = req.experience.unwrap_or(current.experience);
+    let education = req.education.unwrap_or(current.education);
+    let skills = req.skills.unwrap_or(current.skills);
+    let projects = req.projects.unwrap_or(current.projects);
+    let certificates = req.certificates.unwrap_or(current.certificates);
+    let languages = req.languages.unwrap_or(current.languages);
+
+    // 执行更新
+    sqlx::query(
+        r#"
+        UPDATE resume_single
+        SET
+            name = $1, title = $2, email = $3, phone = $4, location = $5,
+            website = $6, github = $7, avatar = $8, bio = $9, summary = $10,
+            experience = $11, education = $12, skills = $13, projects = $14,
+            certificates = $15, languages = $16
+        WHERE id = $17
+        "#,
+    )
+    .bind(&name)
+    .bind(&title)
+    .bind(&email)
+    .bind(&phone)
+    .bind(&location)
+    .bind(&website)
+    .bind(&github)
+    .bind(&avatar)
+    .bind(&bio)
+    .bind(&summary)
+    .bind(&experience)
+    .bind(&education)
+    .bind(&skills)
+    .bind(&projects)
+    .bind(&certificates)
+    .bind(&languages)
+    .bind(LOCKED_RESUME_ID)
+    .execute(pool)
+    .await?;
+
+    // 返回更新后的记录
+    get_resume_single(pool).await?
+        .ok_or_else(|| anyhow::anyhow!("更新后无法获取简历"))
+}
+
+/// 创建单一简历（独立函数，使用硬编码的锁定ID）
+pub async fn create_resume_single(pool: &PgPool, req: CreateResumeSingle) -> Result<ResumeSingle> {
+    let now = chrono::Utc::now();
+    let experience = req.experience.unwrap_or(serde_json::json!([]));
+    let education = req.education.unwrap_or(serde_json::json!([]));
+    let skills = req.skills.unwrap_or(serde_json::json!([]));
+    let projects = req.projects.unwrap_or(serde_json::json!([]));
+    let certificates = req.certificates.unwrap_or(serde_json::json!([]));
+    let languages = req.languages.unwrap_or(serde_json::json!([]));
+
+    sqlx::query(
+        r#"
+        INSERT INTO resume_single (
+            id, name, title, email, phone, location, website, github, avatar, bio,
+            summary, experience, education, skills, projects, certificates, languages,
+            created_at, updated_at, last_updated
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15, $16, $17,
+            $18, $19, $20
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name, title = EXCLUDED.title, email = EXCLUDED.email,
+            phone = EXCLUDED.phone, location = EXCLUDED.location, website = EXCLUDED.website,
+            github = EXCLUDED.github, avatar = EXCLUDED.avatar, bio = EXCLUDED.bio,
+            summary = EXCLUDED.summary, experience = EXCLUDED.experience,
+            education = EXCLUDED.education, skills = EXCLUDED.skills,
+            projects = EXCLUDED.projects, certificates = EXCLUDED.certificates,
+            languages = EXCLUDED.languages
+        "#,
+    )
+    .bind(LOCKED_RESUME_ID)
+    .bind(&req.name)
+    .bind(&req.title)
+    .bind(&req.email)
+    .bind(&req.phone)
+    .bind(&req.location)
+    .bind(&req.website)
+    .bind(&req.github)
+    .bind(&req.avatar)
+    .bind(&req.bio)
+    .bind(&req.summary)
+    .bind(&experience)
+    .bind(&education)
+    .bind(&skills)
+    .bind(&projects)
+    .bind(&certificates)
+    .bind(&languages)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    // 返回创建/更新后的记录
+    get_resume_single(pool).await?
+        .ok_or_else(|| anyhow::anyhow!("创建后无法获取简历"))
 }

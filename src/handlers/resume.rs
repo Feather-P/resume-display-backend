@@ -7,9 +7,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db::queries::{get_resume_single as get_resume_single_db, update_resume_single as update_resume_single_db};
 use crate::db::Queries;
 use crate::models::{
-    CreateResume, Resume, ResumeDetail, ResumeDetailResponse, UpdateResume,
+    CreateResume, Resume, ResumeDetail, ResumeDetailResponse, ResumeSingleResponse,
+    UpdateResume, UpdateResumeRequest,
 };
 
 /// API响应结构
@@ -148,18 +150,18 @@ pub async fn create_resume(
     }
 }
 
-/// 更新简历请求体
+/// 更新简历请求体（旧架构）
 #[derive(Debug, Deserialize)]
-pub struct UpdateResumeRequest {
+pub struct UpdateResumeLegacyRequest {
     pub personal_info_id: Option<Uuid>,
     pub summary: Option<String>,
 }
 
-/// 更新简历
+/// 更新简历（旧架构）
 pub async fn update_resume(
     State(pool): State<PgPool>,
     Path(id): Path<Uuid>,
-    Json(req): Json<UpdateResumeRequest>,
+    Json(req): Json<UpdateResumeLegacyRequest>,
 ) -> Result<Json<ApiResponse<Resume>>, (StatusCode, Json<ErrorResponse>)> {
     let queries = Queries::new(pool);
 
@@ -247,4 +249,67 @@ pub async fn delete_resume(
 /// 健康检查
 pub async fn health_check() -> Json<ApiResponse<()>> {
     Json(ApiResponse::success_no_data("服务运行正常"))
+}
+
+// =====================================================
+// 单一表架构处理函数（无ID参数）
+// =====================================================
+
+/// 获取单一简历（无需ID参数，使用硬编码的锁定ID）
+pub async fn get_resume_single(
+    State(pool): State<PgPool>,
+) -> Result<Json<ApiResponse<ResumeSingleResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let pool_ref = pool;
+    match get_resume_single_db(&pool_ref).await {
+        Ok(Some(resume)) => {
+            let response = ResumeSingleResponse::try_from(resume)
+                .map_err(|e| {
+                    tracing::error!("转换简历响应失败: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorResponse::new("INTERNAL_ERROR", "转换简历响应失败")),
+                    )
+                })?;
+            Ok(Json(ApiResponse::success(response, "获取简历详情成功")))
+        }
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse::new("NOT_FOUND", "简历不存在")),
+        )),
+        Err(e) => {
+            tracing::error!("获取简历详情失败: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::new("INTERNAL_ERROR", "获取简历详情失败")),
+            ))
+        }
+    }
+}
+
+/// 更新单一简历（无需ID参数，使用硬编码的锁定ID）
+pub async fn update_resume_single_handler(
+    State(pool): State<PgPool>,
+    Json(req): Json<UpdateResumeRequest>,
+) -> Result<Json<ApiResponse<ResumeSingleResponse>>, (StatusCode, Json<ErrorResponse>)> {
+    let pool_ref = pool;
+    match update_resume_single_db(&pool_ref, req).await {
+        Ok(resume) => {
+            let response = ResumeSingleResponse::try_from(resume)
+                .map_err(|e| {
+                    tracing::error!("转换简历响应失败: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorResponse::new("INTERNAL_ERROR", "转换简历响应失败")),
+                    )
+                })?;
+            Ok(Json(ApiResponse::success(response, "更新简历成功")))
+        }
+        Err(e) => {
+            tracing::error!("更新简历失败: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::new("INTERNAL_ERROR", "更新简历失败")),
+            ))
+        }
+    }
 }
